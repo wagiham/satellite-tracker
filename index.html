@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Live Satellite Tracker</title>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.93/Build/Cesium/Cesium.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/4.0.0/satellite.min.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.93/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <style>
+    html, body, #cesiumContainer {
+      height: 100%; margin: 0; padding: 0; overflow: hidden;
+    }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1;
+      background: rgba(0, 0, 0, 0.5);
+      color: white;
+      padding: 10px;
+      border-radius: 6px;
+      font-family: sans-serif;
+    }
+    select, input {
+      font-size: 14px;
+      margin-top: 6px;
+    }
+    #infoBox {
+      display: none;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #111;
+      color: white;
+      padding: 12px;
+      border-radius: 8px;
+      width: 300px;
+      font-size: 14px;
+      font-family: sans-serif;
+      z-index: 2;
+    }
+    #infoBox button {
+      margin-top: 10px;
+      background: #333;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #infoTitle {
+      font-weight: bold;
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <br/>
+<button id="toggleLabels">Show Labels</button>
+    <label for="satelliteSet">Choose satellite set:</label><br>
+    <select id="satelliteSet">
+      <option value="stations">Space Stations</option>
+      <option value="active">Active Satellites</option>
+      <option value="weather">Weather Satellites</option>
+      <option value="starlink">Starlink</option>
+    </select><br/>
+    <input type="text" id="searchBox" placeholder="Search satellite...">
+  </div>
+
+  <div id="infoBox">
+    <div id="infoTitle"></div>
+    <div id="infoContent"></div>
+    <button onclick="document.getElementById('infoBox').style.display='none'">Close</button>
+  </div>
+
+  <div id="cesiumContainer"></div>
+
+  <script>
+    Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhZjMwYTQ1MC02MDhhLTQ4OGEtYjUzMy0yMTc0M2MxM2UzMzIiLCJpZCI6MzA4MTM4LCJpYXQiOjE3NDg3NTI1OTl9.KVZ87YPd3nxeuJb4m6wxjMlXF3M7HqBsbbqD_mt3D3s';
+
+    const viewer = new Cesium.Viewer("cesiumContainer", {
+      terrainProvider: Cesium.createWorldTerrain(),
+      shouldAnimate: true,
+      infoBox: true,  // ✨ disable Cesium's built-in metadata pop-up
+      selectionIndicator: true
+    });
+
+    const fallbackTLEs = [
+      {
+        name: "ISS (ZARYA)",
+        tle1: "1 25544U 98067A   24151.45745370  .00003347  00000+0  65131-4 0  9992",
+        tle2: "2 25544  51.6401 196.1469 0004772 100.9522 320.8123 15.50388912452464"
+      }
+    ];
+
+    let satellites = [];
+    let entities = [];
+    let labelsVisible = false;
+
+    function clearSatellites() {
+      entities.forEach(entity => viewer.entities.remove(entity));
+      entities = [];
+    }
+
+    function createGlowCanvas() {
+      const canvas = document.createElement('canvas');
+      const size = 48;
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const gradient = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+      gradient.addColorStop(0.0, 'rgba(255,255,255,0.8)');
+      gradient.addColorStop(0.2, 'rgba(255,255,255,0.3)');
+      gradient.addColorStop(0.4, 'rgba(255,255,255,0.1)');
+      gradient.addColorStop(1.0, 'rgba(255,255,255,0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+      return canvas;
+    }
+
+    function getReadableInfo(sat) {
+  const tle1 = sat.tle1.trim();
+  const tle2 = sat.tle2.trim();
+
+  const epochRaw = tle1.length >= 32 ? tle1.substring(18, 32) : "N/A";
+  const launchYear = tle1.length >= 11 ? "20" + tle1.substring(9, 11) : "N/A";
+  const inclination = tle2.length >= 16 ? parseFloat(tle2.substring(8, 16)).toFixed(2) : "N/A";
+  let meanMotion = tle2.length >= 63 ? parseFloat(tle2.substring(52, 63)) : NaN;
+  let orbitTime = isNaN(meanMotion) ? "N/A" : (1440 / meanMotion).toFixed(1);
+
+  return `
+    🚀 <strong>Satellite:</strong> ${sat.name}<br>
+    📅 <strong>Launch Year:</strong> ${launchYear}<br>
+    🖐️ <strong>Inclination:</strong> ${inclination}°<br>
+    🔄 <strong>Orbit Period:</strong> ~${orbitTime} min<br>
+    🧽 <strong>TLE Epoch:</strong> ${epochRaw}<br>
+    <details style="margin-top:6px;"><summary>Show raw TLE</summary>
+      <pre style="font-size:11px; white-space:pre-wrap;">${tle1}<br>${tle2}</pre>
+    </details>
+  `;
+}
+
+
+    function addSatelliteToCesium(sat) {
+  const satrec = satellite.twoline2satrec(sat.tle1, sat.tle2);
+
+  const entity = viewer.entities.add({
+    name: sat.name,
+    description: getReadableInfo(sat),
+    position: new Cesium.CallbackProperty(() => {
+      try {
+        const now = new Date();
+        const posVel = satellite.propagate(satrec, now);
+        const eci = posVel.position;
+        if (!eci || isNaN(eci.x) || isNaN(eci.y) || isNaN(eci.z)) return null;
+
+        const gmst = satellite.gstime(now);
+        const gd = satellite.eciToGeodetic(eci, gmst);
+        if (!gd || isNaN(gd.latitude) || isNaN(gd.longitude) || isNaN(gd.height)) return null;
+
+        return Cesium.Cartesian3.fromDegrees(
+          Cesium.Math.toDegrees(gd.longitude),
+          Cesium.Math.toDegrees(gd.latitude),
+          gd.height * 1000
+        );
+      } catch (err) {
+        console.warn("Satellite position error:", err);
+        return null;
+      }
+    }, false),
+
+    billboard: {
+      image: createGlowCanvas(),
+      scale: 0.7,  // Slightly larger white glow
+      verticalOrigin: Cesium.VerticalOrigin.CENTER,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY
+    },
+
+    label: {
+      text: sat.name,
+      font: "12px sans-serif",
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 1,
+      pixelOffset: new Cesium.Cartesian2(10, 0),
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      show: new Cesium.CallbackProperty(() => labelsVisible, false)
+    }
+  });
+
+  entities.push(entity);
+}
+
+
+    viewer.selectedEntityChanged.addEventListener(function (selected) {
+      if (selected) {
+        const infoBox = document.getElementById("infoBox");
+        document.getElementById("infoTitle").innerText = selected.name;
+        document.getElementById("infoContent").innerHTML = selected.description;
+        infoBox.style.display = "block";
+      }
+    });
+
+    async function fetchTLEs(set = "stations") {
+      const urls = {
+        stations: "https://celestrak.com/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle",
+        active: "https://celestrak.com/NORAD/elements/gp.php?GROUP=active&FORMAT=tle",
+        weather: "https://celestrak.com/NORAD/elements/gp.php?GROUP=weather&FORMAT=tle",
+        starlink: "https://celestrak.com/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle",
+      };
+
+      try {
+        const res = await fetch(urls[set]);
+        const text = await res.text();
+        const lines = text.trim().split("\n");
+
+        satellites = [];
+        for (let i = 0; i < lines.length; i += 3) {
+          const name = lines[i]?.trim();
+          const tle1 = lines[i + 1];
+          const tle2 = lines[i + 2];
+          if (name && tle1 && tle2 && tle2.length >= 63) satellites.push({ name, tle1, tle2 });
+        }
+
+        clearSatellites();
+        (satellites.length === 0 ? fallbackTLEs : satellites.slice(0, 100)).forEach(addSatelliteToCesium);
+      } catch (err) {
+        console.error("TLE fetch failed", err);
+        clearSatellites();
+        fallbackTLEs.forEach(addSatelliteToCesium);
+      }
+    }
+
+    document.getElementById("satelliteSet").addEventListener("change", e => {
+      clearSatellites();
+      fetchTLEs(e.target.value);
+    });
+
+    document.getElementById("toggleLabels").addEventListener("click", () => {
+  labelsVisible = !labelsVisible;
+  document.getElementById("toggleLabels").innerText = labelsVisible ? "Hide Labels" : "Show Labels";
+});
+
+
+    document.getElementById("searchBox").addEventListener("keyup", e => {
+      const query = e.target.value.toLowerCase();
+      const found = entities.find(ent => ent.name.toLowerCase().includes(query));
+      if (found && e.key === "Enter") viewer.flyTo(found);
+    });
+
+    fetchTLEs();
+  </script>
+</body>
+</html>
