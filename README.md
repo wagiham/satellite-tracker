@@ -2,7 +2,7 @@
 
 A real-time 3D satellite visualization system that combines web-based rendering with orbital mechanics simulation. Built with **CesiumJS** and **Satellite.js**, this project visualizes live satellite trajectories using Two-Line Element (TLE) data, supports user interaction for metadata inspection, and incorporates backend modeling in Python to simulate orbital motion and verify accuracy.
 
-## 🔧 Key Features
+##  Key Features
 
 - **Real-Time Visualization**: Renders satellite positions over an interactive 3D Earth using CesiumJS.
 - **TLE-Based Propagation**: Integrates Satellite.js to parse and propagate orbital paths from live TLE feeds.
@@ -10,9 +10,9 @@ A real-time 3D satellite visualization system that combines web-based rendering 
 - **Orbit Simulation**: Python backend script and Jupyter notebook provide analytical simulations using classical orbital elements.
 - **Modular Design**: Separates visualization (HTML/JS) from modeling (Python) for clear extensibility and testing.
 
-## 🚀 Live Demo
+##  Live Demo
 
-👉 [Launch the Web App](https://wagiham.github.io/satellite-tracker/)
+ [Launch the Web App](https://wagiham.github.io/satellite-tracker/)
 
 ## Technical Overview
 
@@ -28,7 +28,7 @@ A real-time 3D satellite visualization system that combines web-based rendering 
    - Hosted on GitHub Pages with static assets.  
    - Project structured to exclude environment files (e.g., virtualenv) for clean repo cloning and testing.
 
-## 📈 Future Work
+## Future Work
 
 - Implement **collision detection** algorithms based on positional covariance or proximity thresholds.
 - Add time controls and user-selected simulation intervals.
