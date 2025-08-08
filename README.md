@@ -2,10 +2,7 @@
 
 A real-time 3D satellite visualization system that combines web-based rendering with orbital mechanics simulation. Built with **CesiumJS** and **Satellite.js**, this project visualizes live satellite trajectories using Two-Line Element (TLE) data, supports user interaction for metadata inspection, and incorporates backend modeling in Python to simulate orbital motion and verify accuracy.
 
-<p align="center">
-  <img src="banner.png" alt="Featured at DEF CON 32 Aerospace Village" width="600"/>
-</p>
-
+[![Featured at DEF CON 32 – Aerospace Village](https://img.shields.io/badge/Featured%20at-DEF%20CON%2032%20Aerospace%20Village-blueviolet?style=for-the-badge&logo=satellite&logoColor=white)](https://www.aerospacevillage.org/)
 
 ##  Key Features
 
